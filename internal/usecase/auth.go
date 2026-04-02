@@ -14,15 +14,18 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInactiveUser       = errors.New("user is inactive")
 	ErrEmailExists        = errors.New("email already exists")
+	ErrInvalidToken       = errors.New("invalid token")
 )
 
 type UserRepo interface {
-	Create(ctx context.Context, email, passwordHash, role string) (*domain.User, error)
+	Create(ctx context.Context, email, passwordHash, role, displayName string) (*domain.User, error)
 	GetByEmail(ctx context.Context, email string) (*domain.User, error)
+	GetByID(ctx context.Context, id int64) (*domain.User, error)
 }
 
 type TokenService interface {
 	GenerateAccessToken(userID int64, role domain.UserRole) (string, int64, error)
+	ParseAccessToken(token string) (userID int64, role domain.UserRole, err error)
 }
 
 type AuthUsecase struct {
@@ -43,6 +46,7 @@ type RegisterInput struct {
 type RegisterResult struct {
 	UserID int64           `json:"user_id"`
 	Email  string          `json:"email"`
+	Name   string          `json:"name"`
 	Role   domain.UserRole `json:"role"`
 }
 
@@ -57,7 +61,9 @@ func (u *AuthUsecase) Register(ctx context.Context, in RegisterInput) (*Register
 		return nil, err
 	}
 
-	user, err := u.users.Create(ctx, in.Email, string(hash), string(domain.RoleCustomer))
+	displayName := strings.TrimSpace(in.Name)
+
+	user, err := u.users.Create(ctx, in.Email, string(hash), string(domain.RoleCustomer), displayName)
 	if err != nil {
 		// на уровне handler можно маппить repo-ошибку duplicate -> 409
 		return nil, err
@@ -66,7 +72,39 @@ func (u *AuthUsecase) Register(ctx context.Context, in RegisterInput) (*Register
 	return &RegisterResult{
 		UserID: user.ID,
 		Email:  user.Email,
+		Name:   user.DisplayName,
 		Role:   user.Role,
+	}, nil
+}
+
+type MeResult struct {
+	Email string          `json:"email"`
+	Name  string          `json:"name"`
+	Role  domain.UserRole `json:"role"`
+}
+
+func (u *AuthUsecase) Me(ctx context.Context, accessToken string) (*MeResult, error) {
+	if strings.TrimSpace(accessToken) == "" {
+		return nil, ErrInvalidToken
+	}
+
+	userID, _, err := u.tokens.ParseAccessToken(accessToken)
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	user, err := u.users.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return nil, ErrInvalidToken
+		}
+		return nil, err
+	}
+
+	return &MeResult{
+		Email: user.Email,
+		Name:  user.DisplayName,
+		Role:  user.Role,
 	}, nil
 }
 

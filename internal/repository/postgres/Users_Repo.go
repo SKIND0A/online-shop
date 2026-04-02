@@ -11,7 +11,6 @@ import (
 )
 
 var ErrEmailAlreadyExists = errors.New("email already exists")
-var ErrUserNotFound = errors.New("user not found")
 
 type UserRepository struct {
 	pool *pgxpool.Pool
@@ -26,18 +25,20 @@ func (r *UserRepository) Create(
 	email string,
 	passwordHash string,
 	role string,
+	displayName string,
 ) (*domain.User, error) {
 	const q = `
-		INSERT INTO users (email, password_hash, role, is_active)
-		VALUES ($1, $2, $3, true)
-		RETURNING id, email, password_hash, role, is_active, created_at, updated_at
+		INSERT INTO users (email, password_hash, role, display_name, is_active)
+		VALUES ($1, $2, $3, $4, true)
+		RETURNING id, email, password_hash, display_name, role, is_active, created_at, updated_at
 	`
 
 	var u domain.User
-	err := r.pool.QueryRow(ctx, q, email, passwordHash, role).Scan(
+	err := r.pool.QueryRow(ctx, q, email, passwordHash, role, displayName).Scan(
 		&u.ID,
 		&u.Email,
 		&u.PasswordHash,
+		&u.DisplayName,
 		&u.Role,
 		&u.IsActive,
 		&u.CreatedAt,
@@ -56,7 +57,7 @@ func (r *UserRepository) Create(
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	const q = `
-		SELECT id, email, password_hash, role, is_active, created_at, updated_at
+		SELECT id, email, password_hash, display_name, role, is_active, created_at, updated_at
 		FROM users
 		WHERE email = $1
 		LIMIT 1
@@ -67,6 +68,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 		&u.ID,
 		&u.Email,
 		&u.PasswordHash,
+		&u.DisplayName,
 		&u.Role,
 		&u.IsActive,
 		&u.CreatedAt,
@@ -74,7 +76,36 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
+			return nil, domain.ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	return &u, nil
+}
+
+func (r *UserRepository) GetByID(ctx context.Context, id int64) (*domain.User, error) {
+	const q = `
+		SELECT id, email, password_hash, display_name, role, is_active, created_at, updated_at
+		FROM users
+		WHERE id = $1
+		LIMIT 1
+	`
+
+	var u domain.User
+	err := r.pool.QueryRow(ctx, q, id).Scan(
+		&u.ID,
+		&u.Email,
+		&u.PasswordHash,
+		&u.DisplayName,
+		&u.Role,
+		&u.IsActive,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrUserNotFound
 		}
 		return nil, err
 	}

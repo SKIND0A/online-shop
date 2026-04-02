@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +20,10 @@ func main() {
 		log.Fatalf("db connect error: %v", err)
 	}
 	defer pool.Close()
+
+	if err := postgres.EnsureSchema(context.Background(), pool); err != nil {
+		log.Fatalf("db schema: %v", err)
+	}
 
 	//начало
 	jwtTTL, err := time.ParseDuration(cfg.JWTAccessTTL)
@@ -44,6 +49,8 @@ func main() {
 	//начало
 	http.HandleFunc("/api/v1/auth/register", authHandler.Register)
 	http.HandleFunc("/api/v1/auth/login", authHandler.Login)
+	http.HandleFunc("/api/v1/auth/me", authHandler.Me)
+	http.HandleFunc("/shop", uiHandler.ShopPage)
 	http.HandleFunc("/", uiHandler.AuthPage)
 	//конец
 	fmt.Printf("server started on %s\n", cfg.HTTPAddr)

@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/SKIND0A/online-shop/internal/repository/postgres"
 	"github.com/SKIND0A/online-shop/internal/usecase"
@@ -40,6 +42,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "CONFLICT", "email already exists")
 			return
 		}
+		log.Printf("auth register: %v", err)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -77,6 +80,37 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	writeSuccess(w, http.StatusOK, res)
 	//конец
+}
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
+		return
+	}
+
+	raw := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if !strings.HasPrefix(raw, prefix) {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing bearer token")
+		return
+	}
+	token := strings.TrimSpace(raw[len(prefix):])
+	if token == "" {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing bearer token")
+		return
+	}
+
+	res, err := h.auth.Me(r.Context(), token)
+	if err != nil {
+		if errors.Is(err, usecase.ErrInvalidToken) {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid or expired token")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, res)
 }
 
 func writeSuccess(w http.ResponseWriter, status int, data any) {

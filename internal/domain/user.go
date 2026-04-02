@@ -13,6 +13,7 @@ type User struct {
 	ID           int64
 	Email        string
 	PasswordHash string
+	DisplayName  string
 	Role         UserRole
 	IsActive     bool
 	CreatedAt    time.Time

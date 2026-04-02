@@ -59,3 +59,21 @@ func (s *JWTService) Parse(tokenString string) (jwt.MapClaims, error) {
 
 	return claims, nil
 }
+
+// ParseAccessToken возвращает user id и роль из access token.
+func (s *JWTService) ParseAccessToken(tokenString string) (userID int64, role domain.UserRole, err error) {
+	claims, err := s.Parse(tokenString)
+	if err != nil {
+		return 0, "", err
+	}
+	sub, ok := claims["sub"].(string)
+	if !ok {
+		return 0, "", errors.New("invalid sub")
+	}
+	uid, err := strconv.ParseInt(sub, 10, 64)
+	if err != nil {
+		return 0, "", err
+	}
+	roleStr, _ := claims["role"].(string)
+	return uid, domain.UserRole(roleStr), nil
+}
